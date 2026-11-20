@@ -1,0 +1,4 @@
+# La app de escritorio (Python) no se despliega: Vercel solo sirve la página estática de web/
+*.py
+requirements.txt
+*.bat

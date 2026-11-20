@@ -7,7 +7,9 @@
   var DESC_X = [150, 170];     // inicio columna "Descripción" (puntos PDF)
   var DESC_FIN = 330;          // la descripción termina antes de "Cantidad"
   var MEDIDA_X = [400, 460];   // inicio columna "Medidas"
+  var POS_X = [450, 470];      // inicio columna "Pos."
   var RE_MEDIDA = /^\d{1,3}(\.\d{3})*$/;
+  var RE_POS = /^([VH])\s+(\S.*)$/;   // "V \-/", "H |-|", "V 34-/" ...
   var RE_SECCION = /^\d\d\s+[A-ZÁÉÍÓÚÑ]/i;
   var RE_TIPO = { MARCO: /^"?\s*MARCO\b/i, HOJA: /^"?\s*HOJA\b/i };
 
@@ -38,14 +40,21 @@
 
   async function buscarEnPagina(page, tipos) {
     var tc = await page.getTextContent();
-    var seccion = null, encontrados = [];
+    var seccion = null, encontrados = [], posiciones = [], techo = null;
     filas(tc.items).forEach(function (f) {
       var izq = f.items.filter(function (i) { return i.x < 150; }).map(function (i) { return i.s; }).join(" ");
       var resto = f.items.filter(function (i) { return i.x >= 150; });
       if (f.items[0].x < 30 && RE_SECCION.test(izq) && resto.length === 0) {
         seccion = izq.toUpperCase();
+        // la línea de la sección queda ~2,7 pt bajo su texto: la primera fila no debe taparla
+        techo = f.y - 3.22;
         return;
       }
+      f.items.forEach(function (i) { i.techo = techo; });
+      techo = null;
+      // columna "Pos.": V -> ALTO, H -> ANCHO (en todas las filas de la tabla)
+      var pos = f.items.filter(function (i) { return i.x > POS_X[0] && i.x < POS_X[1] && RE_POS.test(i.s); })[0];
+      if (pos) posiciones.push(pos);
       if (!seccion || seccion.indexOf("01 PVC") !== 0) return;
       var desc = f.items.filter(function (i) { return i.x > DESC_X[0] && i.x < DESC_FIN; });
       if (!desc.length || desc[0].x > DESC_X[1]) return;
@@ -53,9 +62,14 @@
       var tipo = tipos.filter(function (t) { return RE_TIPO[t].test(textoDesc); })[0];
       if (!tipo) return;
       var med = f.items.filter(function (i) { return i.x > MEDIDA_X[0] && i.x < MEDIDA_X[1] && RE_MEDIDA.test(i.s); })[0];
-      if (med) encontrados.push({ tipo: tipo, desc: textoDesc, item: med });
+      if (med) encontrados.push({ tipo: tipo, desc: textoDesc, item: med, pos: pos ? nuevaPos(pos.s) : "" });
     });
-    return encontrados;
+    return { medidas: encontrados, posiciones: posiciones };
+  }
+
+  function nuevaPos(t) {
+    var m = RE_POS.exec(t);
+    return (m[1].toUpperCase() === "V" ? "ALTO" : "ANCHO") + " " + m[2];
   }
 
   // Leyenda en el encabezado, entre "HOJA DE TRABAJO" y el logo (coordenadas desde arriba)
@@ -79,21 +93,33 @@
     var lector = await pdfjsLib.getDocument({ data: bytes.slice(0), isEvalSupported: false }).promise;
     var doc = await PDFLib.PDFDocument.load(bytes);
     var fuente = await doc.embedFont(PDFLib.StandardFonts.Helvetica);
+    var mono = await doc.embedFont(PDFLib.StandardFonts.Courier);
     var paginas = doc.getPages();
     var blanco = PDFLib.rgb(1, 1, 1), negro = PDFLib.rgb(0, 0, 0);
-    var cambios = [];
+    var cambios = [], nPos = 0;
+    // tapar un texto viejo (solo la altura de los caracteres, sin tocar las líneas de la tabla)
+    function tapar(pg, it) {
+      // de 0.3 bajo la línea base a 0.88 sobre ella (cubre "|" "\" "/" de Courier),
+      // salvo en la primera fila de una sección: ahí se detiene bajo la línea de la sección
+      var abajo = it.y - 0.3 * it.size, arriba = it.y + 0.88 * it.size;
+      if (it.techo != null) arriba = Math.min(arriba, it.techo);
+      pg.drawRectangle({ x: it.x - 0.6, y: abajo, width: it.w + 1.2,
+                         height: arriba - abajo, color: blanco, borderWidth: 0 });
+    }
     for (var n = 1; n <= lector.numPages; n++) {
-      var encontrados = await buscarEnPagina(await lector.getPage(n), tipos);
+      var r = await buscarEnPagina(await lector.getPage(n), tipos);
       var pg = paginas[n - 1];
-      encontrados.forEach(function (e) {
+      r.medidas.forEach(function (e) {
         var it = e.item, viejo = it.s, nuevo = aTexto(aNumero(viejo) + suma);
-        var der = it.x + it.w;
-        // tapar el número viejo (solo la altura de los dígitos, sin tocar las líneas de la tabla)
-        pg.drawRectangle({ x: it.x - 0.6, y: it.y - 0.25 * it.size, width: it.w + 1.2,
-                           height: 1.05 * it.size, color: blanco, borderWidth: 0 });
+        tapar(pg, it);
         var ancho = fuente.widthOfTextAtSize(nuevo, it.size);
-        pg.drawText(nuevo, { x: der - ancho, y: it.y, size: it.size, font: fuente, color: negro });
-        cambios.push({ pag: n, tipo: e.tipo, desc: e.desc, viejo: viejo, nuevo: nuevo });
+        pg.drawText(nuevo, { x: it.x + it.w - ancho, y: it.y, size: it.size, font: fuente, color: negro });
+        cambios.push({ pag: n, tipo: e.tipo, desc: e.desc, viejo: viejo, nuevo: nuevo, pos: e.pos });
+      });
+      r.posiciones.forEach(function (it) {
+        tapar(pg, it);
+        pg.drawText(nuevaPos(it.s), { x: it.x, y: it.y, size: it.size, font: mono, color: negro });
+        nPos++;
       });
     }
     await lector.destroy();
@@ -103,7 +129,7 @@
       var l2 = "Medidas de " + tipos.join(" y ");
       paginas.forEach(function (pg) { sello(pg, fuente, negrita, l1, l2, PDFLib); });
     }
-    return { bytes: await doc.save(), cambios: cambios };
+    return { bytes: await doc.save(), cambios: cambios, posiciones: nPos };
   }
 
   var api = { procesarPdf: procesarPdf, aTexto: aTexto, aNumero: aNumero };

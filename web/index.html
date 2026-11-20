@@ -56,6 +56,7 @@ th{text-align:left;font-weight:500;color:var(--mute);border-bottom:1px solid var
 td{padding:4px 8px;border-bottom:1px solid var(--line)}
 td.num,th.num{text-align:right;font-family:"Geist Mono",monospace;white-space:nowrap}
 td.nuevo{color:var(--acc);font-weight:500}
+td.pos{font-family:"Geist Mono",monospace;white-space:nowrap}
 .todo{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:16px}
 .nota{color:var(--mute);font-size:14px;margin-top:26px;max-width:70ch}
 .scroll{overflow-x:auto}
@@ -95,7 +96,7 @@ input[type=file]{display:none}
     <span class="n" id="todoN"></span>
   </div>
 
-  <p class="nota">Solo cambian las filas de la sección «01 PVC» cuya descripción empieza con MARCO o HOJA. Refuerzos, junquillos, tapas, vidrios y las cotas del dibujo no se tocan. El archivo nuevo se llama igual que el original más «(+261)» y lleva en el encabezado la leyenda «REFORMULADO +261».</p>
+  <p class="nota">Solo cambian las filas de la sección «01 PVC» cuya descripción empieza con MARCO o HOJA. Refuerzos, junquillos, tapas, vidrios y las cotas del dibujo no se tocan. En la columna «Pos.» de toda la tabla, V pasa a ALTO y H a ANCHO. El archivo nuevo se llama igual que el original más «(+261)» y lleva en el encabezado la leyenda «REFORMULADO +261».</p>
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -151,14 +152,14 @@ input[type=file]{display:none}
     res.innerHTML = resultados.map((r, i) => {
       const filas = r.cambios.map(c => `<tr><td class="num" data-l="Pág.">${c.pag}</td><td data-l="Tipo">${c.tipo}</td>
         <td data-l="Descripción">${esc(c.desc)}</td><td class="num" data-l="Antes">${c.viejo}</td>
-        <td class="num nuevo" data-l="Después">${c.nuevo}</td></tr>`).join("");
+        <td class="num nuevo" data-l="Después">${c.nuevo}</td><td class="pos" data-l="Pos.">${esc(c.pos)}</td></tr>`).join("");
       if (r.error) return `<div class="arch vacio"><div class="cab"><h3>${esc(r.nombre)}</h3>
         <span class="n">Error: ${esc(r.error)}</span></div></div>`;
       return `<div class="arch${r.cambios.length ? "" : " vacio"}"><div class="cab"><h3>${esc(r.salida)}</h3>
         <span class="n">${r.cambios.length ? r.cambios.length + " medidas cambiadas" : "Sin medidas de MARCO/HOJA"}</span>
         <button type="button" data-i="${i}">Descargar PDF</button></div>
         ${r.cambios.length ? `<details><summary>Ver medidas (antes → después)</summary><div class="scroll"><table class="stack">
-        <thead><tr><th class="num">Pág.</th><th>Tipo</th><th>Descripción</th><th class="num">Antes</th><th class="num">Después</th></tr></thead>
+        <thead><tr><th class="num">Pág.</th><th>Tipo</th><th>Descripción</th><th class="num">Antes</th><th class="num">Después</th><th>Pos.</th></tr></thead>
         <tbody>${filas}</tbody></table></div></details>` : ""}</div>`;
     }).join("");
     const ok = resultados.filter(r => r.bytes);

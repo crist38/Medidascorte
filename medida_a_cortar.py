@@ -26,6 +26,8 @@ SUMA_DEFECTO = 261
 # Columnas del formato ePref (en puntos PDF, página A4)
 DESC_X = (150, 170)      # inicio de la columna "Descripción"
 MEDIDA_X = (400, 460)    # inicio de la columna "Medidas"
+POS_X = (450, 470)       # inicio de la columna "Pos."
+RE_POS = re.compile(r"^([VH])\s+(\S.*)$")               # V \-/ , H |-| , V 34-/
 
 RE_SECCION = re.compile(r"^\d\d\s")
 RE_MEDIDA = re.compile(r"^\d{1,3}(\.\d{3})*$")          # 970 / 1.798
@@ -82,6 +84,18 @@ def buscar_medidas(page, tipos):
     return encontrados
 
 
+def buscar_posiciones(page):
+    """Textos de la columna 'Pos.' que empiezan con V o H (ej. 'V \\-/', 'H |-|')."""
+    return [s for s in _spans(page)
+            if POS_X[0] < s["bbox"][0] < POS_X[1] and RE_POS.match(s["text"].strip())]
+
+
+def nueva_pos(txt):
+    """'V \\-/' -> 'ALTO \\-/'   'H |-|' -> 'ANCHO |-|'"""
+    m = RE_POS.match(txt.strip())
+    return ("ALTO" if m.group(1).upper() == "V" else "ANCHO") + " " + m.group(2)
+
+
 def sello(page, l1, l2):
     """Leyenda en el encabezado, entre 'HOJA DE TRABAJO' y el logo."""
     x, arriba, base1, base2, abajo, t1, t2 = 268, 22, 39, 53, 59, 14, 8
@@ -99,18 +113,25 @@ def procesar_pdf(origen, destino, suma=SUMA_DEFECTO, tipos=("MARCO", "HOJA")):
     cambios = []
     for num_pag, page in enumerate(doc, start=1):
         encontrados = buscar_medidas(page, tipos)
-        if not encontrados:
+        posiciones = buscar_posiciones(page)
+        if not encontrados and not posiciones:
             continue
+
+        def borrar(s):
+            # borrar solo ese texto (sin relleno, para no tapar líneas de la tabla)
+            r = pymupdf.Rect(s["bbox"])
+            page.add_redact_annot(pymupdf.Rect(r.x0 - 0.5, r.y0 + 1.5, r.x1 + 0.5, r.y1 - 1.5),
+                                  fill=False)
+
         nuevos = []
         for tipo, desc, s in encontrados:
             viejo = s["text"].strip()
             nuevo = a_texto(a_numero(viejo) + suma)
-            r = pymupdf.Rect(s["bbox"])
-            # borrar solo el número (sin relleno, para no tapar líneas de la tabla)
-            page.add_redact_annot(pymupdf.Rect(r.x0 - 0.5, r.y0 + 1.5, r.x1 + 0.5, r.y1 - 1.5),
-                                  fill=False)
+            borrar(s)
             nuevos.append((s, nuevo))
             cambios.append((num_pag, tipo, desc, viejo, nuevo))
+        for s in posiciones:
+            borrar(s)
         page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE,
                               graphics=pymupdf.PDF_REDACT_LINE_ART_NONE)
         for s, nuevo in nuevos:
@@ -119,6 +140,9 @@ def procesar_pdf(origen, destino, suma=SUMA_DEFECTO, tipos=("MARCO", "HOJA")):
             x_der = s["bbox"][2]                      # columna alineada a la derecha
             page.insert_text((x_der - ancho, s["origin"][1]), nuevo,
                              fontname="helv", fontsize=size, color=(0, 0, 0))
+        for s in posiciones:
+            page.insert_text(s["origin"], nueva_pos(s["text"]),
+                             fontname="cour", fontsize=s["size"], color=(0, 0, 0))
     if cambios:
         l1 = f"REFORMULADO {'+' if suma >= 0 else ''}{suma}"
         l2 = "Medidas de " + " y ".join(tipos)

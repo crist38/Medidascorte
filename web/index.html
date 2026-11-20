@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Medida a cortar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;700&family=Geist+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+/* VOICE: taller, directo, sin adornos: una herramienta de corte que se usa todos los días.
+   IDEA: la hoja de trabajo impresa que va al banco de corte, con la cinta métrica al lado.
+   PICTURE: la zona para soltar PDFs y la lista de resultados con "antes → después" grande.
+   COLOUR and TYPE: aluminio, negro, naranja de trazo; Geist + Geist Mono para medidas.
+   LAYOUT: una columna: título breve, soltar PDFs + opciones, resultados por archivo. */
+:root{color-scheme:light dark;
+  --bg:light-dark(#e9eaec,#141517);--card:light-dark(#ffffff,#1d1f22);--ink:light-dark(#111214,#ececee);
+  --mute:light-dark(#5b5f66,#9ea2a9);--line:light-dark(#c9ccd1,#33363b);--acc:#ff4f00;--ok:light-dark(#1d7a3a,#5fd38a)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Geist,system-ui,sans-serif;overflow-x:clip}
+.band{padding:clamp(24px,4vw,48px) max(5vw,16px);max-width:1040px;margin:0 auto}
+h1{font-size:clamp(32px,5vw,46px);line-height:1.05;margin:0 0 6px;font-weight:700;text-wrap:balance}
+h1 b{color:var(--acc);font-family:"Geist Mono",monospace;font-weight:500}
+.sub{color:var(--mute);margin:0 0 22px;max-width:62ch}
+.regla{height:14px;margin:0 0 22px;background:
+  repeating-linear-gradient(90deg,var(--ink) 0 1px,transparent 1px 10px) bottom/100% 6px no-repeat,
+  repeating-linear-gradient(90deg,var(--ink) 0 1px,transparent 1px 50px) bottom/100% 14px no-repeat;opacity:.55}
+.drop{display:grid;place-items:center;text-align:center;gap:8px;min-height:190px;padding:24px;border:2px dashed var(--line);
+  border-radius:14px;background:var(--card);cursor:pointer;transition:border-color .15s,background .15s}
+.drop:hover,.drop:focus-visible,.drop.sobre{border-color:var(--acc);outline:none}
+.drop strong{font-size:20px}.drop span{color:var(--mute);font-size:15px}
+.drop svg{width:46px;height:46px;color:var(--acc)}
+.opc{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center;margin:18px 0 0;padding:14px 16px;background:var(--card);border-radius:12px}
+.opc label{display:flex;align-items:center;gap:8px;font-weight:500}
+.opc input[type=number]{width:96px;height:44px;font:500 18px "Geist Mono",monospace;padding:0 10px;border:1px solid var(--line);
+  border-radius:8px;background:var(--bg);color:var(--ink)}
+.opc input[type=checkbox]{width:20px;height:20px;accent-color:var(--acc)}
+.opc .esp{flex:1}
+button{font:500 16px Geist,system-ui,sans-serif;min-height:44px;padding:0 18px;border-radius:9px;border:1px solid var(--line);
+  background:var(--card);color:var(--ink);cursor:pointer}
+button:focus-visible,input:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+button.pri{background:var(--acc);border-color:var(--acc);color:#fff}
+button:disabled{opacity:.45;cursor:default}
+.estado{min-height:24px;margin:14px 2px 0;color:var(--mute)}
+.estado.err{color:#d4380d}
+#res{display:grid;gap:12px;margin-top:8px}
+.arch{background:var(--card);border-radius:12px;padding:14px 16px;border-left:4px solid var(--acc)}
+.arch.vacio{border-left-color:var(--line)}
+.cab{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
+.cab h3{margin:0;font-size:17px;flex:1 1 260px;overflow-wrap:anywhere}
+.cab .n{color:var(--mute);font-size:14px;white-space:nowrap}
+details{margin-top:8px}summary{cursor:pointer;color:var(--mute);font-size:14px;min-height:32px;display:flex;align-items:center}
+table{width:100%;border-collapse:collapse;font-size:14px;margin-top:6px}
+th{text-align:left;font-weight:500;color:var(--mute);border-bottom:1px solid var(--line);padding:4px 8px}
+td{padding:4px 8px;border-bottom:1px solid var(--line)}
+td.num,th.num{text-align:right;font-family:"Geist Mono",monospace;white-space:nowrap}
+td.nuevo{color:var(--acc);font-weight:500}
+.todo{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:16px}
+.nota{color:var(--mute);font-size:14px;margin-top:26px;max-width:70ch}
+.scroll{overflow-x:auto}
+input[type=file]{display:none}
+@media(max-width:600px){table{font-size:13px}.stack thead{display:none}.stack tr{display:grid;padding-block:8px;border-bottom:1px solid var(--line)}
+ .stack td{display:flow-root;border:0;padding:2px 0;padding-inline-start:7em;text-align:start}
+ .stack td::before{content:attr(data-l);float:inline-start;width:6.5em;margin-inline-start:-7em;color:var(--mute);font-family:Geist,sans-serif;font-weight:400}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<main class="band">
+  <h1>Medida a cortar <b>+<span id="tSuma">261</span></b></h1>
+  <p class="sub">Suelta las hojas de trabajo de ePref. Se suma el valor a cada medida de <strong>MARCO</strong> y <strong>HOJA</strong> (sección 01 PVC) y obtienes el PDF igual, con las medidas nuevas. Los archivos se procesan en tu navegador; no se suben a ningún lado.</p>
+  <div class="regla" aria-hidden="true"></div>
+
+  <div class="drop" id="drop" tabindex="0" role="button" aria-label="Elegir PDFs">
+    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+      <path d="M12 4h17l9 9v31H12z"/><path d="M29 4v9h9"/><path d="M25 22v14M19 30l6 6 6-6"/></svg>
+    <strong>Suelta aquí los PDFs</strong>
+    <span>o toca para elegirlos (puedes elegir varios)</span>
+  </div>
+  <input type="file" id="file" accept="application/pdf,.pdf" multiple>
+
+  <div class="opc">
+    <label>Sumar <input type="number" id="suma" value="261" step="1" inputmode="numeric"> mm</label>
+    <label><input type="checkbox" id="cMarco" checked> MARCO</label>
+    <label><input type="checkbox" id="cHoja" checked> HOJA</label>
+    <span class="esp"></span>
+    <button id="limpiar" type="button">Limpiar</button>
+  </div>
+
+  <div class="estado" id="estado" aria-live="polite">Cargando herramientas…</div>
+  <div id="res"></div>
+  <div class="todo" id="todo" hidden>
+    <button class="pri" id="zip" type="button">Descargar todos (.zip)</button>
+    <span class="n" id="todoN"></span>
+  </div>
+
+  <p class="nota">Solo cambian las filas de la sección «01 PVC» cuya descripción empieza con MARCO o HOJA. Refuerzos, junquillos, tapas, vidrios y las cotas del dibujo no se tocan. El archivo nuevo se llama igual que el original más «(+261)» y lleva en el encabezado la leyenda «REFORMULADO +261».</p>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="nucleo.js"></script>
+<script>
+{
+  const $ = id => document.getElementById(id);
+  const drop = $("drop"), file = $("file"), estado = $("estado"), res = $("res");
+  const resultados = [];          // {nombre, salida, bytes, cambios}
+  let listo = false, ocupado = false, descargas;   // descargas: undefined = sin decidir
+
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const msg = (t, err) => { estado.textContent = t; estado.className = "estado" + (err ? " err" : ""); };
+
+  function leerSuma() {
+    const v = parseInt($("suma").value, 10);
+    return Number.isFinite(v) ? v : null;
+  }
+  $("suma").addEventListener("input", () => { const v = leerSuma(); $("tSuma").textContent = v === null ? "?" : v; });
+
+  // Descargas: dentro de claude.ai se usa la capacidad "downloads"; fuera, un enlace normal
+  async function obtenerDescargas() {
+    if (descargas !== undefined) return descargas;
+    if (window.claude && typeof window.claude.use === "function") {
+      try { descargas = await window.claude.use("downloads"); } catch (e) { descargas = null; }
+    } else descargas = "enlace";
+    return descargas;
+  }
+  async function guardar(nombre, datos) {
+    const d = await obtenerDescargas();
+    if (d === "enlace") {
+      const url = URL.createObjectURL(new Blob([datos], {type: nombre.endsWith(".zip") ? "application/zip" : "application/pdf"}));
+      const a = document.createElement("a"); a.href = url; a.download = nombre; document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 2000);
+      return;
+    }
+    if (!d) { msg("La descarga no está disponible en esta vista. Abre la página en claude.ai.", true); return; }
+    try {
+      await d.save({ filename: nombre, data: new Blob([datos]) });
+      msg("Descargado: " + nombre);
+    } catch (e) {
+      const code = e && e.code;
+      if (code === "declined") msg("Descarga cancelada.");
+      else if (code === "rate_limited") msg("Ya hay una descarga esperando confirmación. Confírmala e intenta de nuevo.", true);
+      else msg("No se pudo descargar (" + (code || "error") + ").", true);
+    }
+  }
+
+  function pintar() {
+    res.innerHTML = resultados.map((r, i) => {
+      const filas = r.cambios.map(c => `<tr><td class="num" data-l="Pág.">${c.pag}</td><td data-l="Tipo">${c.tipo}</td>
+        <td data-l="Descripción">${esc(c.desc)}</td><td class="num" data-l="Antes">${c.viejo}</td>
+        <td class="num nuevo" data-l="Después">${c.nuevo}</td></tr>`).join("");
+      if (r.error) return `<div class="arch vacio"><div class="cab"><h3>${esc(r.nombre)}</h3>
+        <span class="n">Error: ${esc(r.error)}</span></div></div>`;
+      return `<div class="arch${r.cambios.length ? "" : " vacio"}"><div class="cab"><h3>${esc(r.salida)}</h3>
+        <span class="n">${r.cambios.length ? r.cambios.length + " medidas cambiadas" : "Sin medidas de MARCO/HOJA"}</span>
+        <button type="button" data-i="${i}">Descargar PDF</button></div>
+        ${r.cambios.length ? `<details><summary>Ver medidas (antes → después)</summary><div class="scroll"><table class="stack">
+        <thead><tr><th class="num">Pág.</th><th>Tipo</th><th>Descripción</th><th class="num">Antes</th><th class="num">Después</th></tr></thead>
+        <tbody>${filas}</tbody></table></div></details>` : ""}</div>`;
+    }).join("");
+    const ok = resultados.filter(r => r.bytes);
+    $("todo").hidden = ok.length < 2;
+    $("todoN").textContent = ok.length + " PDF listos";
+  }
+
+  res.addEventListener("click", e => {
+    const b = e.target.closest("button[data-i]");
+    if (!b) return;
+    const r = resultados[+b.dataset.i];
+    guardar(r.salida, r.bytes);
+  });
+
+  $("zip").addEventListener("click", async () => {
+    const zip = new JSZip();
+    resultados.filter(r => r.bytes).forEach(r => zip.file(r.salida, r.bytes));
+    const datos = await zip.generateAsync({ type: "uint8array" });
+    guardar("Medidas +" + (leerSuma() ?? "") + ".zip", datos);
+  });
+
+  async function procesar(lista) {
+    if (!listo) { msg("Las herramientas aún se están cargando. Espera un momento.", true); return; }
+    if (ocupado) return;
+    const suma = leerSuma();
+    if (suma === null) { msg("Escribe un número para sumar.", true); return; }
+    const tipos = [["MARCO", $("cMarco")], ["HOJA", $("cHoja")]].filter(t => t[1].checked).map(t => t[0]);
+    if (!tipos.length) { msg("Marca MARCO y/o HOJA.", true); return; }
+    const pdfs = [...lista].filter(f => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
+    if (!pdfs.length) { msg("No se encontraron PDFs en lo que soltaste.", true); return; }
+    ocupado = true;
+    const signo = suma >= 0 ? "+" : "";
+    for (let k = 0; k < pdfs.length; k++) {
+      const f = pdfs[k];
+      msg(`Procesando ${k + 1} de ${pdfs.length}: ${f.name}`);
+      const salida = f.name.replace(/\.pdf$/i, "") + ` (${signo}${suma}).pdf`;
+      try {
+        const bytes = new Uint8Array(await f.arrayBuffer());
+        const r = await MedidaCore.procesarPdf(bytes, { suma, tipos, pdfjsLib, PDFLib });
+        resultados.unshift({ nombre: f.name, salida, bytes: r.bytes, cambios: r.cambios });
+      } catch (e) {
+        resultados.unshift({ nombre: f.name, salida, error: (e && e.message) || String(e), cambios: [] });
+      }
+      pintar();
+    }
+    ocupado = false;
+    const total = resultados.slice(0, pdfs.length).reduce((s, r) => s + r.cambios.length, 0);
+    msg(`Listo: ${pdfs.length} PDF procesado${pdfs.length > 1 ? "s" : ""}, ${total} medidas cambiadas.`);
+  }
+
+  drop.addEventListener("click", () => file.click());
+  drop.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); file.click(); } });
+  file.addEventListener("change", () => { procesar(file.files); file.value = ""; });
+  ["dragenter", "dragover"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add("sobre"); }));
+  ["dragleave", "drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("sobre"); }));
+  drop.addEventListener("drop", e => procesar(e.dataTransfer.files));
+  document.addEventListener("dragover", e => e.preventDefault());
+  document.addEventListener("drop", e => { if (!drop.contains(e.target)) { e.preventDefault(); procesar(e.dataTransfer.files); } });
+  $("limpiar").addEventListener("click", () => { resultados.length = 0; pintar(); msg("Lista vacía."); });
+
+  if (window.pdfjsLib && window.PDFLib && window.JSZip && window.MedidaCore) {
+    listo = true; msg("Listo para recibir PDFs.");
+  } else msg("No se pudieron cargar las herramientas. Recarga la página.", true);
+  obtenerDescargas();
+}
+</script>
+</body>
+</html>

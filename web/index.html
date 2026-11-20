@@ -70,7 +70,7 @@ input[type=file]{display:none}
 <body>
 <main class="band">
   <h1>Medida a cortar <b>+<span id="tSuma">261</span></b></h1>
-  <p class="sub">Suelta las hojas de trabajo de ePref. Se suma el valor a cada medida de <strong>MARCO</strong> y <strong>HOJA</strong> (sección 01 PVC) y obtienes el PDF igual, con las medidas nuevas. Los archivos se procesan en tu navegador; no se suben a ningún lado.</p>
+  <p class="sub">Suelta las hojas de trabajo de ePref o los listados de montaje de Veratec. Se suma el valor a cada medida de <strong>MARCO</strong> y <strong>HOJA</strong> y obtienes el PDF igual, con las medidas nuevas. Los archivos se procesan en tu navegador; no se suben a ningún lado.</p>
   <div class="regla" aria-hidden="true"></div>
 
   <div class="drop" id="drop" tabindex="0" role="button" aria-label="Elegir PDFs">
@@ -96,7 +96,7 @@ input[type=file]{display:none}
     <span class="n" id="todoN"></span>
   </div>
 
-  <p class="nota">Solo cambian las filas de la sección «01 PVC» cuya descripción empieza con MARCO o HOJA. Refuerzos, junquillos, tapas, vidrios y las cotas del dibujo no se tocan. En la columna «Pos.» de toda la tabla, V pasa a ALTO y H a ANCHO. El archivo nuevo se llama igual que el original más «(+261)» y lleva en el encabezado la leyenda «REFORMULADO +261».</p>
+  <p class="nota">El formato se reconoce solo. <strong>ePref (Hoja de trabajo):</strong> cambian las filas de «01 PVC» cuya descripción empieza con MARCO o HOJA (columna «Medidas»), y en la columna «Pos.» V pasa a ALTO y H a ANCHO; la leyenda «REFORMULADO +261» va en el encabezado. <strong>Veratec (Listado de montaje):</strong> cambian las filas de «Perfiles y refuerzos» cuya descripción empieza con MARCO o HOJA (columna «Ancho»); la leyenda va en el pie de página. Refuerzos, junquillos, tapas, vidrios y las cotas del dibujo no se tocan. El archivo nuevo se llama igual que el original más «(+261)».</p>
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -156,7 +156,7 @@ input[type=file]{display:none}
       if (r.error) return `<div class="arch vacio"><div class="cab"><h3>${esc(r.nombre)}</h3>
         <span class="n">Error: ${esc(r.error)}</span></div></div>`;
       return `<div class="arch${r.cambios.length ? "" : " vacio"}"><div class="cab"><h3>${esc(r.salida)}</h3>
-        <span class="n">${r.cambios.length ? r.cambios.length + " medidas cambiadas" : "Sin medidas de MARCO/HOJA"}</span>
+        <span class="n">${r.formato} · ${r.cambios.length ? r.cambios.length + " medidas cambiadas" : "Sin medidas de MARCO/HOJA"}</span>
         <button type="button" data-i="${i}">Descargar PDF</button></div>
         ${r.cambios.length ? `<details><summary>Ver medidas (antes → después)</summary><div class="scroll"><table class="stack">
         <thead><tr><th class="num">Pág.</th><th>Tipo</th><th>Descripción</th><th class="num">Antes</th><th class="num">Después</th><th>Pos.</th></tr></thead>
@@ -199,7 +199,8 @@ input[type=file]{display:none}
       try {
         const bytes = new Uint8Array(await f.arrayBuffer());
         const r = await MedidaCore.procesarPdf(bytes, { suma, tipos, pdfjsLib, PDFLib });
-        resultados.unshift({ nombre: f.name, salida, bytes: r.bytes, cambios: r.cambios });
+        resultados.unshift({ nombre: f.name, salida, bytes: r.bytes, cambios: r.cambios,
+                             formato: r.formato === "veratec" ? "Veratec" : "ePref" });
       } catch (e) {
         resultados.unshift({ nombre: f.name, salida, error: (e && e.message) || String(e), cambios: [] });
       }

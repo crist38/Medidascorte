@@ -1,13 +1,17 @@
 """
 Medida a cortar
 ---------------
-Suma un valor fijo (por defecto 261 mm) a las medidas de MARCO y HOJA
-en las "HOJA DE TRABAJO" generadas por ePref (PrefSuite).
+Suma un valor fijo (por defecto 261 mm) a las medidas de MARCO y HOJA.
+Reconoce solo el formato del PDF:
 
-Solo se modifican las filas de la sección "01 PVC" cuya descripción
-empieza con "MARCO" o "HOJA" (ej. "MARCO PVC 2 GUIAS 6,05 M",
-"HOJA PVC H=93 MM FBL 6,05M"). Refuerzos, junquillos, tapas, etc. no
-se tocan. El PDF original nunca se sobrescribe: se crea una copia.
+- "HOJA DE TRABAJO" de ePref (PrefSuite): filas de la sección "01 PVC" cuya
+  descripción empieza con MARCO o HOJA, columna "Medidas". Además, en la
+  columna "Pos." cambia V por ALTO y H por ANCHO.
+- "LISTADO DE MONTAJE" de Veratec: filas de "Perfiles y refuerzos" cuya
+  descripción empieza con MARCO o HOJA, columna "Ancho".
+
+Refuerzos, junquillos, tapas, etc. no se tocan. El PDF original nunca se
+sobrescribe: se crea una copia.
 
 Uso:
     python medida_a_cortar.py                 -> abre la ventana
@@ -107,13 +111,107 @@ def sello(page, l1, l2):
     page.insert_text((x + 7, base2), l2, fontname="helv", fontsize=t2, color=rojo)
 
 
+# ----------------------------------------------------------------- Veratec
+# "LISTADO DE MONTAJE": las celdas no comparten línea base (la descripción va arriba y
+# los números centrados). Cada número de la columna "Ancho" marca el centro de una fila y
+# cada línea de la descripción se asigna a la fila cuyo número le queda más cerca.
+V_DESC_X = (70, 185)          # columna "Descripción del Material"
+V_ANCHO_CX = (345, 370)       # centro de la columna "Ancho" (357,5)
+V_POS_X = (255, 325)          # columna "Posición" (ALTO / ANCHO)
+V_SECCION = re.compile(r"^(Perfiles y refuerzos|Vidrios|Accesorios|Mano de obra)$", re.I)
+V_PIE = 40                    # pie de página ("OBRA:..." / "Página nº"), desde abajo
+V_NUM = re.compile(r"^\d+([.,]\d+)*$")
+V_MEDIDA = re.compile(r"^\d+(\.\d{3})*$")
+
+
+def detectar_formato(doc):
+    texto = doc[0].get_text() if len(doc) else ""
+    return "veratec" if re.search(r"LISTADO DE MONTAJE|Descripci[oó]n del Material", texto, re.I) else "epref"
+
+
+def buscar_veratec(page, tipos, estado):
+    """Devuelve (lista de (tipo, descripcion, span_medida), spans_del_pie)."""
+    h = page.rect.height
+    spans = _spans(page)
+    cuerpo = [s for s in spans if s["origin"][1] <= h - V_PIE]
+    pie = [s for s in spans if s["origin"][1] > h - V_PIE]
+    eventos = []
+    for s in cuerpo:
+        t = s["text"].strip()
+        x0, x1 = s["bbox"][0], s["bbox"][2]
+        if 200 < x0 < 360 and V_SECCION.match(t):
+            eventos.append((s["origin"][1], t, None))
+        elif V_ANCHO_CX[0] < (x0 + x1) / 2 < V_ANCHO_CX[1] and V_NUM.match(t):
+            eventos.append((s["origin"][1], None, s))
+    eventos.sort(key=lambda e: e[0])
+    anclas = []
+    for y, sec, s in eventos:
+        if sec:
+            estado["seccion"] = sec.upper()      # sigue de una página a la siguiente
+        else:
+            anclas.append({"y": y, "span": s, "seccion": estado["seccion"], "lineas": []})
+    lineas = {}
+    for s in cuerpo:
+        if V_DESC_X[0] <= s["bbox"][0] < V_DESC_X[1]:
+            y = s["origin"][1]
+            clave = next((k for k in lineas if abs(k - y) < 1.5), y)
+            lineas.setdefault(clave, []).append(s)
+    for y, partes in lineas.items():
+        texto = " ".join(p["text"].strip() for p in sorted(partes, key=lambda p: p["bbox"][0]))
+        cerca = min(anclas, key=lambda a: abs(a["y"] - y), default=None)
+        if cerca and abs(cerca["y"] - y) < 18:
+            cerca["lineas"].append((y, texto))
+    encontrados = []
+    for a in anclas:
+        t = a["span"]["text"].strip()
+        if not (a["seccion"] or "").startswith("PERFILES") or not V_MEDIDA.match(t) or not a["lineas"]:
+            continue
+        a["lineas"].sort()
+        tipo = next((k for k in tipos if RE_DESC[k].match(a["lineas"][0][1])), None)
+        if tipo:
+            encontrados.append((tipo, " ".join(l[1] for l in a["lineas"]), a["span"]))
+    return encontrados, pie
+
+
+def sello_pie(page, l1, l2, pie):
+    """Veratec: una línea en el pie, entre 'OBRA:...' y 'Página nº' (o arriba si no cabe)."""
+    W = page.rect.width
+    rojo = (0.82, 0.1, 0.08)
+    w1 = pymupdf.get_text_length(l1, fontname="hebo", fontsize=10)
+    w2 = pymupdf.get_text_length(l2, fontname="helv", fontsize=7.5)
+    ancho = w1 + 6 + w2 + 12
+    izq, der, base = 20, W - 20, page.rect.height - 24
+    for s in pie:
+        x0, x1 = s["bbox"][0], s["bbox"][2]
+        if (x0 + x1) / 2 < W / 2:
+            izq = max(izq, x1)
+        else:
+            der = min(der, x0)
+        base = s["origin"][1]
+    if der - izq - 24 >= ancho:
+        x = (izq + der) / 2 - ancho / 2
+    else:                                          # no cabe en el pie: arriba a la derecha
+        x, base = W - 20 - ancho, 15
+    page.draw_rect(pymupdf.Rect(x, base - 11, x + ancho, base + 4), color=rojo, fill=(1, 1, 1), width=1)
+    page.insert_text((x + 6, base), l1, fontname="hebo", fontsize=10, color=rojo)
+    page.insert_text((x + 6 + w1 + 6, base), l2, fontname="helv", fontsize=7.5, color=rojo)
+
+
 def procesar_pdf(origen, destino, suma=SUMA_DEFECTO, tipos=("MARCO", "HOJA")):
     """Crea 'destino' con las medidas cambiadas. Devuelve lista de cambios."""
     doc = pymupdf.open(origen)
+    formato = detectar_formato(doc)
+    estado = {"seccion": None}
+    pies = []
     cambios = []
     for num_pag, page in enumerate(doc, start=1):
-        encontrados = buscar_medidas(page, tipos)
-        posiciones = buscar_posiciones(page)
+        if formato == "veratec":
+            encontrados, pie = buscar_veratec(page, tipos, estado)
+            posiciones = []                          # la Posición ya dice ALTO / ANCHO
+            pies.append(pie)
+        else:
+            encontrados = buscar_medidas(page, tipos)
+            posiciones = buscar_posiciones(page)
         if not encontrados and not posiciones:
             continue
 
@@ -126,7 +224,9 @@ def procesar_pdf(origen, destino, suma=SUMA_DEFECTO, tipos=("MARCO", "HOJA")):
         nuevos = []
         for tipo, desc, s in encontrados:
             viejo = s["text"].strip()
-            nuevo = a_texto(a_numero(viejo) + suma)
+            n = a_numero(viejo) + suma
+            # ePref usa punto de miles (1.798); Veratec escribe el número sin punto (2106)
+            nuevo = a_texto(n) if formato == "epref" or "." in viejo else str(n)
             borrar(s)
             nuevos.append((s, nuevo))
             cambios.append((num_pag, tipo, desc, viejo, nuevo))
@@ -137,8 +237,11 @@ def procesar_pdf(origen, destino, suma=SUMA_DEFECTO, tipos=("MARCO", "HOJA")):
         for s, nuevo in nuevos:
             size = s["size"]
             ancho = pymupdf.get_text_length(nuevo, fontname="helv", fontsize=size)
-            x_der = s["bbox"][2]                      # columna alineada a la derecha
-            page.insert_text((x_der - ancho, s["origin"][1]), nuevo,
+            if formato == "veratec":                  # columna centrada
+                x = (s["bbox"][0] + s["bbox"][2]) / 2 - ancho / 2
+            else:                                     # columna alineada a la derecha
+                x = s["bbox"][2] - ancho
+            page.insert_text((x, s["origin"][1]), nuevo,
                              fontname="helv", fontsize=size, color=(0, 0, 0))
         for s in posiciones:
             page.insert_text(s["origin"], nueva_pos(s["text"]),
@@ -146,8 +249,11 @@ def procesar_pdf(origen, destino, suma=SUMA_DEFECTO, tipos=("MARCO", "HOJA")):
     if cambios:
         l1 = f"REFORMULADO {'+' if suma >= 0 else ''}{suma}"
         l2 = "Medidas de " + " y ".join(tipos)
-        for page in doc:
-            sello(page, l1, l2)
+        for i, page in enumerate(doc):
+            if formato == "veratec":
+                sello_pie(page, l1, l2, pies[i])
+            else:
+                sello(page, l1, l2)
     doc.save(destino, garbage=3, deflate=True)
     doc.close()
     return cambios

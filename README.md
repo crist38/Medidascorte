@@ -1,16 +1,27 @@
 # Medida a cortar
 
-Suma un valor fijo (por defecto **261 mm**) a las medidas de **MARCO** y **HOJA** en las
-"HOJA DE TRABAJO" generadas por ePref (PrefSuite), y entrega el mismo PDF con las medidas nuevas.
+Suma un valor fijo (por defecto **261 mm**) a las medidas de **MARCO** y **HOJA** y entrega el
+mismo PDF con las medidas nuevas. El formato del PDF se reconoce solo.
 
-- Solo cambian las filas de la sección **01 PVC** cuya descripción empieza con `MARCO` o `HOJA`
-  (por ejemplo `MARCO PVC 2 GUIAS 6,05 M`, `HOJA PVC H=93 MM FBL 6,05M`).
-- Refuerzos, junquillos, tapas, vidrios y las cotas del dibujo no se tocan.
+### ePref — "HOJA DE TRABAJO" (PrefSuite)
+
+- Cambian las filas de la sección **01 PVC** cuya descripción empieza con `MARCO` o `HOJA`
+  (por ejemplo `MARCO PVC 2 GUIAS 6,05 M`, `HOJA PVC H=93 MM FBL 6,05M`), columna **Medidas**.
 - La medida se escribe en el mismo formato: `1.798` → `2.059`, `970` → `1.231`.
 - En la columna **Pos.** de toda la tabla, `V` pasa a **ALTO** y `H` a **ANCHO**
   (se mantiene el símbolo de corte: `V \-/` → `ALTO \-/`, `H |-|` → `ANCHO |-|`).
-- Cada página del PDF resultante lleva en el encabezado la leyenda **REFORMULADO +261**.
-- El original nunca se sobrescribe: se crea `NOMBRE (+261).pdf`.
+- Cada página lleva en el encabezado la leyenda **REFORMULADO +261**.
+
+### Veratec — "LISTADO DE MONTAJE"
+
+- Cambian las filas de **Perfiles y refuerzos** cuya descripción empieza con `MARCO` o `HOJA`
+  (por ejemplo `MARCO CORREDERA 74MM 2R`, `HOJA VENTANA APERT. EXTER. 60X79`), columna **Ancho**:
+  `2106` → `2367`. La sección puede seguir en la página siguiente sin encabezado.
+- La columna **Posición** ya dice ALTO / ANCHO, así que no se cambia.
+- La leyenda **REFORMULADO +261** va en el pie de cada página, entre «OBRA:…» y «Página nº».
+
+En los dos formatos: refuerzos, junquillos, tapas, vidrios y las cotas del dibujo no se tocan, y
+el original nunca se sobrescribe: se crea `NOMBRE (+261).pdf`.
 
 ## Versión web (`web/`)
 
